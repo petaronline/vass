@@ -1,0 +1,102 @@
+# ====================================================================
+# Vass — docker-compose orchestration
+#
+# One command brings the whole stack up:
+#
+#   docker compose up -d
+#
+# Services:
+#   - postgres   (database)
+#   - redis      (queue + cache)
+#   - backend    (API + launch worker + audit worker, all in one container)
+#   - frontend   (Next.js static + SSR)
+#
+# Bound to 127.0.0.1 only. A reverse proxy (Apache, nginx, Caddy, cPanel)
+# in front terminates TLS and forwards to:
+#   - host port 3030 → frontend
+#   - host port 4040 → backend  (paths starting with /api/* should be
+#                                rewritten by the reverse proxy to strip
+#                                the /api prefix before forwarding here)
+#
+# Change the host-side ports here if 3030/4040 are taken on your server.
+# The container-side ports (3000/4000) should NOT be changed.
+# ====================================================================
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: vass-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-vass}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-vass}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vass}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: vass-redis
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redis_data:/data
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: vass-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 4000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vass}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-vass}
+      REDIS_URL: redis://redis:6379
+      SESSION_SECRET: ${SESSION_SECRET}
+      FRONTEND_URL: ${FRONTEND_URL}
+      UPLOAD_ROOT: /uploads
+    volumes:
+      - vass_uploads:/uploads
+    ports:
+      - "127.0.0.1:4040:4000"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+    container_name: vass-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+    ports:
+      - "127.0.0.1:3030:3000"
+
+volumes:
+  postgres_data:
+  redis_data:
+  vass_uploads:
