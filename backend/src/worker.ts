@@ -278,13 +278,29 @@ async function processLaunchAdJob(data: LaunchAdJobData): Promise<void> {
     const featuresSpec = launchDefaults.toMetaSpec(resolvedDefaults.config);
 
     // --- Step 3: create AdCreative ---
-    // Branch on group size:
-    //   - 1 asset → simple object_story_spec (link_data or video_data)
-    //   - 2+ assets → asset_feed_spec with per-placement customization rules
+    // Branch on the number of DISTINCT PLACEMENT GROUPS, NOT raw asset count.
+    //   - <2 groups → simple object_story_spec (link_data or video_data)
+    //   - 2+ groups → asset_feed_spec with per-placement customization rules
+    // Why groups and not count/bucket: asset customization rules only make
+    // sense when assets target DIFFERENT placements. 1_1 and 4_5 both target
+    // feed, so a 4:5 + 1:1 pair (or two 4:5s) yields customization rules with
+    // identical/overlapping placements — which Meta rejects with "Asset
+    // Customization Rules field is not supported in asset feed" (subcode
+    // 1885896). The meaningful axis is feed vs. story/reels.
+    const placementGroupForBucket = (b: meta.PlacementBucket): 'feed' | 'story' =>
+      b === '9_16' ? 'story' : 'feed';
+    const distinctGroups = new Set(
+      assets
+        .map((a) => a.bucket)
+        .filter((b): b is meta.PlacementBucket => b !== null)
+        .map(placementGroupForBucket)
+    );
     let creativeResult: meta.MetaAdCreativeResult;
 
-    if (assets.length === 1) {
-      const a = assets[0];
+    if (distinctGroups.size < 2) {
+      // Single effective placement — use the simple path. Prefer an asset that
+      // has a recognized bucket; fall back to the first asset otherwise.
+      const a = assets.find((x) => x.bucket !== null) ?? assets[0];
       creativeResult = await meta.createAdCreative(accessToken, {
         metaAdAccountId: account.metaAccountId,
         name: launch.payload.creativeName || launch.ad_name,

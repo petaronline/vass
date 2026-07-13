@@ -1812,9 +1812,24 @@ export async function createAssetFeedAdCreative(
   };
 
   if (input.creativeFeaturesSpec) {
-    body.degrees_of_freedom_spec = {
-      creative_features_spec: input.creativeFeaturesSpec,
-    };
+    // `asset_customization_rules` (manual per-placement assets) is mutually
+    // exclusive with Meta's automatic placement-adaptation features. If we
+    // send `adapt_to_placement` in the same creative — even as OPT_OUT — Meta
+    // rejects the whole creative with subcode 1885896: "The Asset
+    // Customization Rules field is not supported in asset feed." Strip the
+    // conflicting placement features here; the customization rules already
+    // define per-placement behavior explicitly.
+    const PLACEMENT_CONFLICTING_FEATURES = ['adapt_to_placement'];
+    const safeFeaturesSpec = Object.fromEntries(
+      Object.entries(input.creativeFeaturesSpec).filter(
+        ([key]) => !PLACEMENT_CONFLICTING_FEATURES.includes(key)
+      )
+    );
+    if (Object.keys(safeFeaturesSpec).length > 0) {
+      body.degrees_of_freedom_spec = {
+        creative_features_spec: safeFeaturesSpec,
+      };
+    }
   }
   if (input.multiAdvertiserOptOut) {
     body.contextual_multi_ads = { enroll_status: 'OPT_OUT' };

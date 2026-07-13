@@ -7,11 +7,37 @@
 
 export class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  /** Raw `detail` payload from the backend, if any (e.g. Zod flatten output). */
+  detail?: unknown;
+  constructor(message: string, status: number, detail?: unknown) {
     super(message);
     this.status = status;
+    this.detail = detail;
     this.name = 'ApiError';
   }
+}
+
+/**
+ * Turn a backend error body into a specific, human-readable message. When the
+ * body carries a Zod `flatten()` `detail`, append the first field-level reason
+ * so the user sees "Invalid launch spec — copy.linkUrl: linkUrl must start
+ * with https://" instead of the bare "Invalid launch spec".
+ */
+function composeErrorMessage(parsed: any, status: number): string {
+  const base = parsed?.error ?? `Request failed with status ${status}`;
+  const detail = parsed?.detail;
+  const fieldErrors = detail?.fieldErrors as
+    | Record<string, string[]>
+    | undefined;
+  const formErrors = detail?.formErrors as string[] | undefined;
+  const parts: string[] = [];
+  if (fieldErrors) {
+    for (const [field, msgs] of Object.entries(fieldErrors)) {
+      if (msgs && msgs.length) parts.push(`${field}: ${msgs[0]}`);
+    }
+  }
+  if (formErrors && formErrors.length) parts.push(...formErrors);
+  return parts.length ? `${base} — ${parts.join('; ')}` : base;
 }
 
 interface RequestOptions {
@@ -39,8 +65,7 @@ async function request<T = unknown>(path: string, opts: RequestOptions = {}): Pr
   }
 
   if (!res.ok) {
-    const message = parsed?.error ?? `Request failed with status ${res.status}`;
-    throw new ApiError(message, res.status);
+    throw new ApiError(composeErrorMessage(parsed, res.status), res.status, parsed?.detail);
   }
 
   return parsed as T;

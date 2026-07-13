@@ -115,6 +115,20 @@ function clientFieldFromHeader(header: string): VassField | null {
   return aliases[k] ?? null;
 }
 
+/**
+ * Coerce a user-typed destination into the https:// URL the backend requires.
+ * Bare domains ("stagestep.com") get an https:// prefix; http:// is upgraded
+ * to https://. Empty stays empty (the caller decides if that's an error).
+ * Mirrors the backend's linkUrl rule in routes/launches.ts.
+ */
+function normalizeLinkUrl(raw: string): string {
+  const t = raw.trim();
+  if (!t) return '';
+  if (/^https:\/\//i.test(t)) return t;
+  if (/^http:\/\//i.test(t)) return t.replace(/^http:\/\//i, 'https://');
+  return `https://${t}`;
+}
+
 export default function SheetsPage() {
   const router = useRouter();
 
@@ -617,7 +631,7 @@ export default function SheetsPage() {
             // Description defaults to primary text when not explicitly set
             description: o.description ?? item.row.description ?? primaryText,
             cta: o.cta ?? item.row.cta ?? '',
-            linkUrl: o.linkUrl ?? item.row.linkUrl ?? '',
+            linkUrl: normalizeLinkUrl(o.linkUrl ?? item.row.linkUrl ?? ''),
             urlTags: o.urlTags ?? '',
           };
         };
