@@ -20,7 +20,7 @@ import { getCommentScanQueue, getCommentSweepQueue } from './queue';
 import { audit } from './audit';
 import { findAdAccountById } from './ad-accounts';
 import * as meta from './meta';
-import * as organicConn from './organic-connection';
+import * as pageTokens from './page-tokens';
 import {
   type CommentRules,
   normalizeRules,
@@ -373,7 +373,7 @@ export async function unhideAction(
   if (action.unhidden_at) return { ok: true }; // already unhidden — idempotent
   if (!action.page_id) return { ok: false, error: 'Missing Page for this comment' };
 
-  const pageToken = await organicConn.getFacebookPageToken(userId, action.page_id);
+  const pageToken = await pageTokens.getPageToken(userId, action.page_id);
   if (!pageToken) return { ok: false, error: 'Page is no longer connected' };
 
   await meta.setCommentHidden(pageToken, action.comment_id, false);

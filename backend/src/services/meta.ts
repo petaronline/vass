@@ -24,6 +24,14 @@ export const REQUIRED_SCOPES = [
   'ads_management',
   'ads_read',
   'business_management',
+  // Comment Guard. Hiding a comment needs the owning Page's page-scoped
+  // token, which we now read from /me/accounts (services/page-tokens.ts)
+  // rather than borrowing from the organic app's connected-accounts table.
+  // Users who connected before these were added keep working everywhere
+  // except Comment Guard until they reconnect in Settings → Meta.
+  'pages_show_list',
+  'pages_read_engagement',
+  'pages_manage_engagement',
 ];
 
 export interface MetaUser {

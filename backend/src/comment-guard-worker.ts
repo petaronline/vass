@@ -13,7 +13,7 @@ import { query } from './db/pool';
 import * as metaConn from './services/meta-connection';
 import * as guards from './services/comment-guards';
 import * as meta from './services/meta';
-import * as organicConn from './services/organic-connection';
+import * as pageTokens from './services/page-tokens';
 import { findAdAccountById } from './services/ad-accounts';
 import { matchComment } from './services/comment-rules';
 import { notify } from './services/notifications';
@@ -68,7 +68,7 @@ export async function runGuardScan(guardId: string): Promise<void> {
     const postRefs = await meta.getCreativePostRefs(accessToken, creativeIds);
 
     // 3. Which of the selected Pages are actually connected right now
-    const connectedPages = await organicConn.listFacebookPages(guard.user_id);
+    const connectedPages = await pageTokens.listManagedPages(guard.user_id);
     const connectedPageIds = new Set(connectedPages.map((p) => p.pageId));
     const selectedPageIds = new Set(guard.target_page_ids);
 
@@ -152,7 +152,7 @@ export async function runGuardSweep(guardId: string): Promise<void> {
   const tokenCache = new Map<string, string | null>();
   const getPageToken = async (pageId: string): Promise<string | null> => {
     if (tokenCache.has(pageId)) return tokenCache.get(pageId)!;
-    const tok = await organicConn.getFacebookPageToken(guard.user_id, pageId);
+    const tok = await pageTokens.getPageToken(guard.user_id, pageId);
     tokenCache.set(pageId, tok);
     return tok;
   };

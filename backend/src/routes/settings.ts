@@ -26,6 +26,7 @@ import { requireAuth, requireRole } from '../middleware/auth';
 import * as metaConn from '../services/meta-connection';
 import * as metaApi from '../services/meta';
 import { audit } from '../services/audit';
+import * as pageTokens from '../services/page-tokens';
 import { query } from '../db/pool';
 import { env } from '../utils/env';
 
@@ -198,6 +199,9 @@ settingsRouter.get('/meta/callback', requireAuth, async (req: Request, res: Resp
       me.id,
       me.name
     );
+    // A reconnect is how a user grants the Comment Guard page scopes. Drop the
+    // cached Page list so the new grant takes effect now, not up to 10min later.
+    pageTokens.invalidate(req.user!.id);
 
     await audit({
       userId: req.user!.id,
@@ -222,6 +226,7 @@ settingsRouter.post(
   requireAuth,
   async (req: Request, res: Response) => {
     await metaConn.clearAccessToken(req.user!.id);
+    pageTokens.invalidate(req.user!.id);
     await audit({
       userId: req.user!.id,
       action: 'meta.oauth.disconnected',

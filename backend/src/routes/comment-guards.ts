@@ -16,7 +16,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import * as guards from '../services/comment-guards';
-import { listFacebookPages } from '../services/organic-connection';
+import { listManagedPages } from '../services/page-tokens';
 
 export const commentGuardsRouter = Router();
 
@@ -43,8 +43,12 @@ const createSchema = z.object({
 });
 
 // GET /comment-guards/pages — must be declared before '/:id'
+// NOTE: listManagedPages returns a page-scoped accessToken per Page. Project
+// down to id + name before responding — those tokens must never leave the
+// server.
 commentGuardsRouter.get('/pages', requireAuth, async (req: Request, res: Response) => {
-  const pages = await listFacebookPages(req.user!.id);
+  const managed = await listManagedPages(req.user!.id);
+  const pages = managed.map((p) => ({ pageId: p.pageId, name: p.name }));
   res.json({ pages });
 });
 

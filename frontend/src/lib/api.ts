@@ -920,8 +920,14 @@ export type CommentGuardStatus =
   | 'paused'
   | 'failed';
 
+/**
+ * A Page the signed-in user administers, from GET /comment-guards/pages.
+ *
+ * Sourced from Meta's /me/accounts, not from a local table — so there is no
+ * local row id, only Meta's own Page id. (Before the organic split this came
+ * from organic_connected_accounts and carried that row's `id` too.)
+ */
 export interface ConnectedPage {
-  id: string;
   pageId: string;
   name: string | null;
 }
