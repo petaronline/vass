@@ -45,15 +45,16 @@ rm -f "$ZIP_LOCAL"
     -x '*.tsbuildinfo' -x '*/.DS_Store' )
 echo "    $(du -h "$ZIP_LOCAL" | cut -f1) packaged"
 
-echo "==> [4/5] Cleaning server staging + uploading…"
-# Remove previously-extracted trees so install-patch can't re-inject stale files.
-ssh -o BatchMode=yes "$SERVER" "rm -rf '$STAGING/backend' '$STAGING/frontend'"
+echo "==> [4/5] Uploading patch…"
 scp -o BatchMode=yes "$ZIP_LOCAL" "$SERVER:$STAGING/"
 echo "    uploaded to $STAGING/$ZIP"
 
 echo "==> [5/5] Done. Finish on the server AS ROOT with:"
 echo
-echo "    /opt/vass/install-patch.sh $STAGING/$ZIP && \\"
+# The staging trees are root-owned (unzipped by prior root installs), so the
+# stale-file cleanup must run as root here — not from the Mac as petaronline.
+echo "    rm -rf $STAGING/backend $STAGING/frontend && \\"
+echo "      /opt/vass/install-patch.sh $STAGING/$ZIP && \\"
 echo "      ( sleep 5; ss -tln | grep -q ':4040' || ( cd /opt/vass && docker compose restart backend ) )"
 echo
 echo "Then verify from anywhere:"
