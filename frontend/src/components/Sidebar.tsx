@@ -32,6 +32,7 @@ import {
   Shield,
   Users,
   Table2,
+  MessageSquareOff,
   Sprout,
   ChevronDown,
   PenLine,
@@ -93,6 +94,7 @@ const PRIMARY_NAV: NavItem[] = [
   { kind: 'flat',  label: 'Bulk launch', href: '/bulk-launch', icon: Layers,          active: ACTIVE_AMBER },
   { kind: 'flat',  label: 'Sheets',      href: '/sheets',      icon: Table2,          active: ACTIVE_ROSE },
   { kind: 'flat',  label: 'Audit',       href: '/audit',       icon: Shield,          active: ACTIVE_MINT },
+  { kind: 'flat',  label: 'Comment Guard', href: '/comment-guard', icon: MessageSquareOff, active: ACTIVE_SKY },
   { kind: 'flat',  label: 'Templates',   href: '/templates',   icon: BookCopy,        active: ACTIVE_LILAC },
   {
     kind: 'group',

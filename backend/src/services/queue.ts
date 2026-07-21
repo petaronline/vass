@@ -35,6 +35,8 @@ export const QUEUE_NAMES = {
   auditFix: 'vass-audit-fix',
   organicPublish: 'vass-organic-publish',
   metaSync: 'vass-meta-sync',
+  commentScan: 'vass-comment-scan',
+  commentSweep: 'vass-comment-sweep',
 } as const;
 
 // The job-specific payload. Keeping this tiny (just an ID) — the worker
@@ -64,13 +66,21 @@ export interface AuditFixJobData {
 
 let launchAdQueue: Queue<LaunchAdJobData> | null = null;
 
+/**
+ * Total BullMQ attempts for a launch-ad job. Exported so the worker can tell
+ * when it's on the FINAL attempt and mark a transiently-failing launch as
+ * terminally failed instead of leaving it stuck at status='launching' forever.
+ * Keep in sync with defaultJobOptions.attempts below.
+ */
+export const LAUNCH_AD_MAX_ATTEMPTS = 3;
+
 export function getLaunchAdQueue(): Queue<LaunchAdJobData> {
   if (launchAdQueue) return launchAdQueue;
   launchAdQueue = new Queue<LaunchAdJobData>(QUEUE_NAMES.launchAd, {
     connection: getRedisConnection() as ConnectionOptions,
     defaultJobOptions: {
       // Retries: 3 total attempts. Exponential backoff: 5s, 25s, 125s.
-      attempts: 3,
+      attempts: LAUNCH_AD_MAX_ATTEMPTS,
       backoff: { type: 'exponential', delay: 5_000 },
       // Keep completed jobs around briefly for debugging, then auto-clean
       removeOnComplete: { age: 3600, count: 1000 },
@@ -117,15 +127,16 @@ export function getAuditFixQueue(): Queue<AuditFixJobData> {
  * The processor function gets the job and runs Meta API calls.
  */
 export function createLaunchAdWorker(
-  processor: (data: LaunchAdJobData, jobId: string) => Promise<void>
+  processor: (data: LaunchAdJobData, jobId: string, attemptsMade: number) => Promise<void>
 ): Worker<LaunchAdJobData> {
   return new Worker<LaunchAdJobData>(
     QUEUE_NAMES.launchAd,
     async (job) => {
       // Wrap the processor so we can log uniformly. Errors bubble up
-      // to BullMQ for retry handling.
+      // to BullMQ for retry handling. attemptsMade is 0-indexed (0 on the
+      // first run) so the processor can detect the final attempt.
       console.log(`[worker] processing ${job.id} (attempt ${job.attemptsMade + 1})`);
-      await processor(job.data, String(job.id));
+      await processor(job.data, String(job.id), job.attemptsMade);
     },
     {
       connection: getRedisConnection() as ConnectionOptions,
@@ -285,6 +296,89 @@ export function createMetaSyncWorker(
   );
 }
 
+// ─── Comment Guard queues ──────────────────────────────────────────────
+// Two queues, mirroring audit's scan/act split:
+//
+//   commentScan  — { guardId }. Resolve the guard's scope into monitored
+//                  post targets (campaign → ad sets → ads → creative → post).
+//
+//   commentSweep — shares two job types:
+//     'sweep-tick' (empty payload) — repeatable every 60s; the runner walks
+//        all active guards and sweeps any whose interval has elapsed.
+//     'sweep-one'  ({ guardId })   — on-demand "sweep now" from the API.
+
+export interface CommentScanJobData {
+  guardId: string;
+}
+
+export interface CommentSweepJobData {
+  /** Empty for the repeatable tick; set for an on-demand single-guard sweep. */
+  guardId?: string;
+}
+
+let commentScanQueue: Queue<CommentScanJobData> | null = null;
+export function getCommentScanQueue(): Queue<CommentScanJobData> {
+  if (commentScanQueue) return commentScanQueue;
+  commentScanQueue = new Queue<CommentScanJobData>(QUEUE_NAMES.commentScan, {
+    connection: getRedisConnection() as ConnectionOptions,
+    defaultJobOptions: {
+      attempts: 2,
+      backoff: { type: 'exponential', delay: 5_000 },
+      removeOnComplete: { age: 24 * 60 * 60 },
+      removeOnFail:     { age: 7 * 24 * 60 * 60 },
+    },
+  });
+  return commentScanQueue;
+}
+
+let commentSweepQueue: Queue<CommentSweepJobData> | null = null;
+export function getCommentSweepQueue(): Queue<CommentSweepJobData> {
+  if (commentSweepQueue) return commentSweepQueue;
+  commentSweepQueue = new Queue<CommentSweepJobData>(QUEUE_NAMES.commentSweep, {
+    connection: getRedisConnection() as ConnectionOptions,
+    defaultJobOptions: {
+      // A missed sweep is caught by the next tick, so retry lightly.
+      attempts: 2,
+      backoff: { type: 'exponential', delay: 10_000 },
+      removeOnComplete: { age: 6 * 60 * 60 },
+      removeOnFail:     { age: 24 * 60 * 60 },
+    },
+  });
+  return commentSweepQueue;
+}
+
+export function createCommentScanWorker(
+  processor: (data: CommentScanJobData, jobId: string) => Promise<void>
+): Worker<CommentScanJobData> {
+  return new Worker<CommentScanJobData>(
+    QUEUE_NAMES.commentScan,
+    async (job) => {
+      console.log(`[comment-scan] processing ${job.id} (attempt ${job.attemptsMade + 1})`);
+      await processor(job.data, String(job.id));
+    },
+    {
+      connection: getRedisConnection() as ConnectionOptions,
+      concurrency: 2,
+    }
+  );
+}
+
+export function createCommentSweepWorker(
+  processor: (data: CommentSweepJobData, jobName: string) => Promise<void>
+): Worker<CommentSweepJobData> {
+  return new Worker<CommentSweepJobData>(
+    QUEUE_NAMES.commentSweep,
+    async (job) => {
+      await processor(job.data, job.name);
+    },
+    {
+      connection: getRedisConnection() as ConnectionOptions,
+      // One sweep pass at a time keeps the Graph API call rate predictable.
+      concurrency: 1,
+    }
+  );
+}
+
 export async function closeQueues(): Promise<void> {
   if (launchAdQueue) {
     await launchAdQueue.close();
@@ -305,6 +399,14 @@ export async function closeQueues(): Promise<void> {
   if (metaSyncQueue) {
     await metaSyncQueue.close();
     metaSyncQueue = null;
+  }
+  if (commentScanQueue) {
+    await commentScanQueue.close();
+    commentScanQueue = null;
+  }
+  if (commentSweepQueue) {
+    await commentSweepQueue.close();
+    commentSweepQueue = null;
   }
   if (connection) {
     await connection.quit();

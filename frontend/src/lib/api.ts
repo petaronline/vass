@@ -903,6 +903,117 @@ export const audits = {
 };
 
 // ============================================================
+// Comment Guard — rule-matched auto-hide moderation for ad comments
+// ============================================================
+
+export interface CommentRules {
+  links?: boolean;
+  phone?: boolean;
+  profanity?: boolean;
+  keywords?: string[];
+}
+
+export type CommentGuardStatus =
+  | 'pending'
+  | 'scanning'
+  | 'active'
+  | 'paused'
+  | 'failed';
+
+export interface ConnectedPage {
+  id: string;
+  pageId: string;
+  name: string | null;
+}
+
+export interface CommentGuard {
+  id: string;
+  adAccountId: string;
+  metaCampaignId: string;
+  metaCampaignName: string | null;
+  targetAdSetIds: string[];
+  targetPageIds: string[];
+  activeOnly: boolean;
+  rules: CommentRules;
+  sweepIntervalMinutes: number;
+  status: CommentGuardStatus;
+  errorMessage: string | null;
+  adsTotal: number;
+  targetsTotal: number;
+  commentsHidden: number;
+  lastScannedAt: string | null;
+  lastSweptAt: string | null;
+  createdAt: string;
+}
+
+export interface CommentGuardTarget {
+  id: string;
+  metaAdId: string;
+  metaAdName: string | null;
+  metaAdStatus: string | null;
+  metaAdSetId: string | null;
+  pageId: string | null;
+  postId: string | null;
+  pageConnected: boolean;
+  commentsHidden: number;
+  lastCheckedAt: string | null;
+  lastError: string | null;
+}
+
+export interface CommentGuardAction {
+  id: string;
+  commentId: string;
+  matchedRule: 'links' | 'phone' | 'profanity' | 'keyword';
+  matchedDetail: string | null;
+  commentMessage: string | null;
+  authorName: string | null;
+  permalinkUrl: string | null;
+  hiddenAt: string;
+  unhiddenAt: string | null;
+}
+
+export interface CommentGuardCreateSpec {
+  adAccountId: string;
+  metaCampaignId: string;
+  metaCampaignName?: string;
+  targetAdSetIds: string[];
+  targetPageIds: string[];
+  activeOnly: boolean;
+  rules: CommentRules;
+  sweepIntervalMinutes: number;
+}
+
+/** Allowed sweep intervals in minutes. Keep in sync with backend. */
+export const COMMENT_GUARD_INTERVALS = [5, 15, 30, 60] as const;
+
+export const commentGuards = {
+  listPages: () => api.get<{ pages: ConnectedPage[] }>('/comment-guards/pages'),
+  list: () => api.get<{ guards: CommentGuard[] }>('/comment-guards'),
+  create: (spec: CommentGuardCreateSpec) =>
+    api.post<{ guardId: string }>('/comment-guards', spec),
+  get: (id: string) =>
+    api.get<{
+      guard: CommentGuard;
+      targets: CommentGuardTarget[];
+      actions: CommentGuardAction[];
+    }>(`/comment-guards/${id}`),
+  update: (
+    id: string,
+    patch: {
+      rules?: CommentRules;
+      sweepIntervalMinutes?: number;
+      status?: 'active' | 'paused';
+    }
+  ) => api.patch<{ guard: CommentGuard }>(`/comment-guards/${id}`, patch),
+  sweep: (id: string) =>
+    api.post<{ sweepQueued: boolean }>(`/comment-guards/${id}/sweep`, {}),
+  unhide: (id: string, actionId: string) =>
+    api.post<{ unhidden: boolean }>(`/comment-guards/${id}/unhide`, { actionId }),
+  remove: (id: string) =>
+    api.delete<{ deleted: boolean }>(`/comment-guards/${id}`),
+};
+
+// ============================================================
 // Sheet imports (Patch 4)
 // ============================================================
 

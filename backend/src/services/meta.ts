@@ -906,6 +906,123 @@ export async function getAdCreativeDetails(
   return result;
 }
 
+// =====================================================================
+// Comment moderation (Comment Guard)
+// =====================================================================
+// Meta has NO API to disable comments on an ad. What IS permitted is hiding
+// individual comments on the ad's underlying Page post. These helpers read a
+// creative's post id, page through a post's comments, and hide/unhide one.
+//
+// Hiding requires a PAGE-scoped token (pages_manage_engagement) for the Page
+// that owns the post — NOT the user/ads token used by the rest of this file.
+
+export interface MetaCreativePostRef {
+  id: string;
+  /** "{pageid}_{postid}" — the live post backing the ad. Preferred. */
+  effective_object_story_id?: string;
+  /** Set when the creative was built from an existing organic post. */
+  object_story_id?: string;
+}
+
+/**
+ * Batch-read the underlying post id for a set of creatives (ads/user token).
+ * Returns a Map keyed by creative id.
+ */
+export async function getCreativePostRefs(
+  accessToken: string,
+  creativeIds: string[]
+): Promise<Map<string, MetaCreativePostRef>> {
+  if (creativeIds.length === 0) return new Map();
+  const result = new Map<string, MetaCreativePostRef>();
+  const BATCH = 50;
+  for (let i = 0; i < creativeIds.length; i += BATCH) {
+    const batch = creativeIds.slice(i, i + BATCH);
+    const url =
+      `${GRAPH_BASE}/` +
+      `?ids=${encodeURIComponent(batch.join(','))}` +
+      `&fields=id,effective_object_story_id,object_story_id`;
+    const data: Record<string, MetaCreativePostRef> = await metaFetch(url, {
+      access_token: accessToken,
+    });
+    for (const [id, ref] of Object.entries(data ?? {})) {
+      if (ref && typeof ref === 'object') result.set(id, ref);
+    }
+  }
+  return result;
+}
+
+export interface MetaComment {
+  id: string;
+  message?: string;
+  created_time?: string;
+  is_hidden?: boolean;
+  permalink_url?: string;
+  from?: { id?: string; name?: string };
+}
+
+/**
+ * List comments on a post, newest-first, paginating up to `maxPages`.
+ *
+ * Pass `sinceUnix` (seconds) to only return comments created after that time.
+ * Because Meta's `since` support on the comments edge is unreliable, we page
+ * newest-first, stop once we cross the watermark, then filter client-side —
+ * robust regardless of API quirks. Requires the owning Page's token.
+ */
+export async function listPostComments(
+  pageToken: string,
+  postId: string,
+  sinceUnix?: number,
+  maxPages = 10
+): Promise<MetaComment[]> {
+  const fields = 'id,message,created_time,is_hidden,permalink_url,from{id,name}';
+  let nextUrl: string | null =
+    `${GRAPH_BASE}/${encodeURIComponent(postId)}/comments` +
+    `?fields=${fields}&filter=stream&order=reverse_chronological&limit=100`;
+  const out: MetaComment[] = [];
+  let pages = 0;
+  const toSec = (t?: string) => (t ? Math.floor(new Date(t).getTime() / 1000) : 0);
+
+  while (nextUrl && pages < maxPages) {
+    const page: { data: MetaComment[]; paging?: { next?: string } } =
+      await metaFetch(nextUrl, { access_token: pageToken });
+    const batch = page.data ?? [];
+    out.push(...batch);
+    // Newest-first: once the oldest in this page is past the watermark, stop.
+    if (sinceUnix && batch.length > 0) {
+      const oldest = toSec(batch[batch.length - 1].created_time);
+      if (oldest && oldest <= sinceUnix) break;
+    }
+    nextUrl = page.paging?.next ?? null;
+    pages++;
+  }
+
+  return sinceUnix ? out.filter((c) => toSec(c.created_time) > sinceUnix) : out;
+}
+
+/** Hide or unhide a single comment. Requires the owning Page's token. */
+export async function setCommentHidden(
+  pageToken: string,
+  commentId: string,
+  hidden: boolean
+): Promise<void> {
+  const url = `${GRAPH_BASE}/${encodeURIComponent(commentId)}`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ is_hidden: hidden, access_token: pageToken }),
+  });
+  const text = await res.text();
+  let data: any = null;
+  try { data = text ? JSON.parse(text) : null; } catch { /* swallow */ }
+  if (!res.ok || data?.error) {
+    throw new MetaApiError(
+      data?.error?.message ?? `Set comment is_hidden failed (${res.status})`,
+      res.status,
+      data?.error
+    );
+  }
+}
+
 /**
  * PATCH an existing AdCreative to set its creative_features_spec and/or
  * contextual_multi_ads. Used by the audit-fix worker.

@@ -258,6 +258,48 @@ export async function saveAccount(input: SaveAccountInput): Promise<OrganicAccou
   return rowToAccount(rows[0]);
 }
 
+/**
+ * List a user's connected Facebook Pages (id + Meta page id + display name).
+ * Used by the Comment Guard "pick Pages to administer" picker and to tell
+ * which ads' comments we can actually moderate.
+ */
+export async function listFacebookPages(
+  userId: string
+): Promise<Array<{ id: string; pageId: string; name: string | null }>> {
+  const accounts = await listAccountsByPlatform(userId, 'facebook_page');
+  return accounts.map((a) => ({
+    id: a.id,
+    pageId: a.externalId,
+    name: (a.meta?.name as string | undefined) ?? null,
+  }));
+}
+
+/**
+ * Get the decrypted **Page-scoped** token for a specific Page by its Meta page
+ * id (not the Vass row id). Returns null if the Page isn't connected for this
+ * user. This is the token needed to hide comments on that Page's posts.
+ */
+export async function getFacebookPageToken(
+  userId: string,
+  pageId: string
+): Promise<string | null> {
+  const { rows } = await query<{ access_token_encrypted: string | null }>(
+    `SELECT access_token_encrypted
+       FROM organic_connected_accounts
+      WHERE user_id = $1 AND platform = 'facebook_page'
+        AND external_id = $2 AND disconnected_at IS NULL
+      LIMIT 1`,
+    [userId, pageId]
+  );
+  const enc = rows[0]?.access_token_encrypted;
+  if (!enc) return null;
+  try {
+    return decryptSecret(enc);
+  } catch {
+    return null;
+  }
+}
+
 /** Soft-delete: mark the account as disconnected. */
 export async function disconnectAccount(
   userId: string,

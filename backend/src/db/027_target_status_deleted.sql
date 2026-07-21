@@ -13,9 +13,15 @@
 ALTER TABLE organic_post_targets
     DROP CONSTRAINT IF EXISTS target_status_check;
 
+-- NOTE (fix): the original version of this migration listed only
+--   ('pending','publishing','published','failed','skipped','deleted')
+-- which silently DROPPED 'scheduled' — a value added by 020. Any row for a
+-- scheduled post therefore violated the new constraint and this migration
+-- failed on every box that still had scheduled targets. The list below is the
+-- full union of every status 018/020/027 and the app code actually use.
 ALTER TABLE organic_post_targets
     ADD CONSTRAINT target_status_check
-    CHECK (status IN ('pending','publishing','published','failed','skipped','deleted'));
+    CHECK (status IN ('pending','scheduled','publishing','published','failed','skipped','deleted'));
 
 -- Speed up the tombstone pass: lookups by (account_id, external_post_id)
 -- within a time window need to be quick.

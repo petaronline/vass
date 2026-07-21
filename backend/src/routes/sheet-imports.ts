@@ -24,7 +24,7 @@ export const sheetImportsRouter = Router();
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 25 * 1024 * 1024, files: 1 },
+  limits: { fileSize: 50 * 1024 * 1024, files: 1 },
 });
 
 /**
@@ -218,7 +218,7 @@ sheetImportsRouter.post(
 // Multer error handler — catches LIMIT_FILE_SIZE etc. and returns clean JSON
 sheetImportsRouter.use((err: any, _req: Request, res: Response, next: any) => {
   if (err?.code === 'LIMIT_FILE_SIZE') {
-    return res.status(400).json({ error: 'File too large (max 25MB for spreadsheets)' });
+    return res.status(400).json({ error: 'File too large (max 50MB for spreadsheets)' });
   }
   if (err?.message) {
     return res.status(400).json({ error: err.message });

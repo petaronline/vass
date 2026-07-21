@@ -29,6 +29,11 @@ import {
   type LaunchAdJobData,
 } from './services/queue';
 import { runAuditScan, runAuditFix } from './audit-worker';
+import {
+  startCommentScanWorker,
+  startCommentSweepWorker,
+  scheduleCommentSweepTick,
+} from './services/comment-guard-runner';
 import { runPublish as runOrganicPublish } from './services/organic-publish-runner';
 import { startMetaSyncWorker, scheduleHourlySync } from './services/meta-sync-runner';
 import { closePool, query, transaction } from './db/pool';
@@ -502,6 +507,13 @@ async function main() {
     console.error('[meta-sync] Failed to schedule hourly sweep:', err);
   });
 
+  // Comment Guard: scan worker + sweep worker + repeatable 1-min tick.
+  const commentScanWorker = startCommentScanWorker();
+  const commentSweepWorker = startCommentSweepWorker();
+  await scheduleCommentSweepTick().catch((err) => {
+    console.error('[comment-guard] Failed to schedule sweep tick:', err);
+  });
+
   worker.on('failed', (job, err) => {
     console.warn(`[worker] job ${job?.id} failed (attempt ${job?.attemptsMade}): ${err.message}`);
   });
@@ -532,6 +544,18 @@ async function main() {
   metaSyncWorker.on('error', (err) => {
     console.error('[meta-sync] error:', err.message);
   });
+  commentScanWorker.on('failed', (job, err) => {
+    console.warn(`[comment-scan] job ${job?.id} failed: ${err.message}`);
+  });
+  commentScanWorker.on('error', (err) => {
+    console.error('[comment-scan] error:', err.message);
+  });
+  commentSweepWorker.on('failed', (job, err) => {
+    console.warn(`[comment-sweep] job ${job?.id} failed: ${err.message}`);
+  });
+  commentSweepWorker.on('error', (err) => {
+    console.error('[comment-sweep] error:', err.message);
+  });
 
   // Graceful shutdown
   const shutdown = async () => {
@@ -541,6 +565,8 @@ async function main() {
     await auditFixWorker.close();
     await organicPublishWorker.close();
     await metaSyncWorker.close();
+    await commentScanWorker.close();
+    await commentSweepWorker.close();
     const conn = getRedisConnection();
     await conn.quit();
     await closePool();
