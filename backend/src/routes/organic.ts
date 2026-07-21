@@ -217,9 +217,12 @@ organicRouter.get('/accounts/callback', requireAuth, async (req: Request, res: R
 
       let savedCount = 0;
       for (const page of pagesData.data) {
+        // Store the STABLE redirect endpoint, not page.picture.data.url — the
+        // signed CDN url expires ("URL signature expired"). /{id}/picture
+        // 302-redirects to the current image on every request.
         const picUrl =
           page.picture?.data && !page.picture.data.is_silhouette
-            ? page.picture.data.url
+            ? `https://graph.facebook.com/${page.id}/picture?type=large`
             : null;
 
         await organicConn.saveAccount({

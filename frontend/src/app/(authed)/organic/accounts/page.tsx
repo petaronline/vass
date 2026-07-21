@@ -35,6 +35,7 @@ import {
   MessageCircle,
 } from 'lucide-react';
 import { PageHeader, PAGE_TINTS } from '@/components/PageHeader';
+import { AdAccountAvatar } from '@/components/AdAccountAvatar';
 import { organicAccounts, OrganicAccount, OrganicPlatform, ApiError } from '@/lib/api';
 
 // ─── Platform config ─────────────────────────────────────────────────────────
@@ -348,16 +349,10 @@ function AccountRow({
 
   return (
     <li className="flex items-center gap-4 px-6 py-3.5">
-      {/* Avatar */}
-      <div className="w-9 h-9 rounded-full overflow-hidden shrink-0 bg-surface-hover flex items-center justify-center">
-        {pictureUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={pictureUrl} alt={displayName ?? ''} className="w-full h-full object-cover" />
-        ) : (
-          <span className="text-sm font-semibold text-ink-muted">
-            {(displayName ?? '?').charAt(0).toUpperCase()}
-          </span>
-        )}
+      {/* Avatar — AdAccountAvatar falls back to a colored initial if the
+          picture URL fails to load (e.g. an expired Meta signed URL). */}
+      <div className="shrink-0">
+        <AdAccountAvatar name={displayName ?? '?'} pictureUrl={pictureUrl ?? null} size={36} />
       </div>
 
       {/* Info */}

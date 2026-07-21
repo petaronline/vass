@@ -57,6 +57,7 @@ import {
   Brand,
   ApiError,
 } from '@/lib/api';
+import { AdAccountAvatar } from '@/components/AdAccountAvatar';
 
 // ─── Platform config ─────────────────────────────────────────────────────────
 
@@ -788,16 +789,9 @@ function AccountCard({
       <GripVertical size={14} className="text-ink-subtle shrink-0" />
 
       <div className="relative shrink-0">
-        <div className="w-10 h-10 rounded-full overflow-hidden bg-surface-hover flex items-center justify-center">
-          {pictureUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={pictureUrl} alt={displayName ?? ''} className="w-full h-full object-cover" />
-          ) : (
-            <span className="text-sm font-semibold text-ink-muted">
-              {(displayName ?? '?').charAt(0).toUpperCase()}
-            </span>
-          )}
-        </div>
+        {/* AdAccountAvatar falls back to a colored initial if the picture URL
+            fails to load (e.g. an expired Meta signed URL). */}
+        <AdAccountAvatar name={displayName ?? '?'} pictureUrl={pictureUrl ?? null} size={40} />
         <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full bg-white flex items-center justify-center border border-white">
           <PlatformIcon size={11} style={{ color: platform?.iconColor }} strokeWidth={2.5} />
         </div>
