@@ -26,6 +26,7 @@ import {
   type Worker,
 } from './queue';
 import * as metaSync from './meta-sync';
+import { notify } from './notifications';
 
 /** Repeatable-job key for the hourly sweep. Stable so we don't accumulate
  *  duplicates on worker restarts. */
@@ -120,6 +121,9 @@ async function runHourlySweep(): Promise<void> {
   let failed = 0;
   let deepRuns = 0;
   let totalUpserted = 0;
+  /** userId → how many of their accounts failed this sweep (for one summary
+   *  notification per user, instead of one per account per hour). */
+  const failuresByUser = new Map<string, number>();
 
   const DEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
   const now = Date.now();
@@ -141,6 +145,7 @@ async function runHourlySweep(): Promise<void> {
 
       if (result.error) {
         failed++;
+        failuresByUser.set(a.user_id, (failuresByUser.get(a.user_id) ?? 0) + 1);
         console.warn(`[meta-sync-runner] ${a.platform} ${a.id} failed: ${result.error}`);
       } else {
         succeeded++;
@@ -160,8 +165,62 @@ async function runHourlySweep(): Promise<void> {
       }
     } catch (err) {
       failed++;
+      failuresByUser.set(a.user_id, (failuresByUser.get(a.user_id) ?? 0) + 1);
       console.error(`[meta-sync-runner] ${a.platform} ${a.id} threw:`, err);
     }
+  }
+
+  // ---- Notifications (best-effort; notify() never throws) ----
+  const dayKey = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+
+  // One summary per user per day — a single broken permission can fail dozens
+  // of accounts every hour, so per-account alerts would be unusable.
+  for (const [userId, count] of failuresByUser.entries()) {
+    await notify({
+      userId,
+      type: 'sync.error',
+      severity: 'warning',
+      title: `${count} account${count === 1 ? '' : 's'} failed to sync`,
+      body: 'Meta rejected the request — the connection may need reauthorising.',
+      link: '/settings/social-profiles',
+      dedupeKey: `syncfail:${userId}:${dayKey}`,
+      metadata: { failed: count },
+    });
+  }
+
+  // Tokens expiring within 7 days, deduped per account per day.
+  try {
+    const { rows: expiring } = await query<{
+      id: string;
+      user_id: string;
+      platform: string;
+      meta: Record<string, unknown> | null;
+      token_expires_at: string;
+    }>(
+      `SELECT id, user_id, platform, meta, token_expires_at
+         FROM organic_connected_accounts
+        WHERE disconnected_at IS NULL
+          AND token_expires_at IS NOT NULL
+          AND token_expires_at <= NOW() + INTERVAL '7 days'`
+    );
+    for (const acc of expiring) {
+      const name =
+        (acc.meta?.name as string | undefined) ??
+        (acc.meta?.username as string | undefined) ??
+        acc.platform;
+      await notify({
+        userId: acc.user_id,
+        type: 'meta.token_expiring',
+        severity: 'warning',
+        title: `${name} — access expires soon`,
+        body: 'Reconnect this profile to avoid interrupted publishing and syncing.',
+        link: '/settings/social-profiles',
+        dedupeKey: `token:${acc.id}:${dayKey}`,
+        metadata: { accountId: acc.id, platform: acc.platform, expiresAt: acc.token_expires_at },
+      });
+    }
+  } catch (err) {
+    console.warn('[meta-sync-runner] token-expiry check failed:', err);
   }
 
   const elapsedSec = ((Date.now() - t0) / 1000).toFixed(1);

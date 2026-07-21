@@ -29,6 +29,7 @@ import {
   type LaunchAdJobData,
 } from './services/queue';
 import { runAuditScan, runAuditFix } from './audit-worker';
+import { notify } from './services/notifications';
 import {
   startCommentScanWorker,
   startCommentSweepWorker,
@@ -480,6 +481,44 @@ async function updateBatchCounters(client: PoolClient, batchId: string): Promise
      WHERE id = $5`,
     [succeeded, failed, status, inFlight, batchId]
   );
+
+  // Notify the owner once the batch reaches a terminal state. The dedupe key
+  // makes repeat calls a no-op, so this fires exactly once per batch.
+  if (inFlight === 0) {
+    try {
+      const { rows: bRows } = await client.query<{ user_id: string; name: string | null }>(
+        `SELECT user_id, name FROM launch_batches WHERE id = $1`,
+        [batchId]
+      );
+      const b = bRows[0];
+      if (b?.user_id) {
+        const label = b.name || 'Launch';
+        const title =
+          status === 'completed'
+            ? `${label} — ${succeeded} ad${succeeded === 1 ? '' : 's'} launched`
+            : status === 'partial'
+              ? `${label} — ${succeeded} launched, ${failed} failed`
+              : `${label} — launch failed`;
+        await notify({
+          client,
+          userId: b.user_id,
+          type: `launch.${status}`,
+          severity:
+            status === 'completed' ? 'success' : status === 'partial' ? 'warning' : 'error',
+          title,
+          body:
+            status === 'completed'
+              ? null
+              : `${failed} of ${total} ad${total === 1 ? '' : 's'} failed.`,
+          link: `/launches/${batchId}`,
+          dedupeKey: `launch:${batchId}`,
+          metadata: { batchId, succeeded, failed, total, status },
+        });
+      }
+    } catch {
+      // Never let notification bookkeeping fail the batch update.
+    }
+  }
 }
 
 // =====================================================================

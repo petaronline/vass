@@ -16,6 +16,7 @@ import * as meta from './services/meta';
 import * as organicConn from './services/organic-connection';
 import { findAdAccountById } from './services/ad-accounts';
 import { matchComment } from './services/comment-rules';
+import { notify } from './services/notifications';
 
 const toUnix = (d: Date | null | undefined): number =>
   d ? Math.floor(d.getTime() / 1000) : 0;
@@ -232,4 +233,21 @@ export async function runGuardSweep(guardId: string): Promise<void> {
      WHERE id = $1`,
     [guardId, hiddenThisSweep]
   );
+
+  // Tell the owner when a sweep actually hid something. Deduped per guard per
+  // hour so a 5-minute sweep cadence can't spam the bell.
+  if (hiddenThisSweep > 0) {
+    const hourKey = new Date().toISOString().slice(0, 13); // YYYY-MM-DDTHH
+    const label = guard.meta_campaign_name || 'Comment Guard';
+    await notify({
+      userId: guard.user_id,
+      type: 'comment_guard.hidden',
+      severity: 'info',
+      title: `${hiddenThisSweep} comment${hiddenThisSweep === 1 ? '' : 's'} hidden`,
+      body: `On ads in ${label}.`,
+      link: '/comment-guard',
+      dedupeKey: `cg:${guardId}:${hourKey}`,
+      metadata: { guardId, hidden: hiddenThisSweep },
+    });
+  }
 }

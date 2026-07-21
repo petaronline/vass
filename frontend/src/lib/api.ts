@@ -1876,3 +1876,30 @@ export const organicIdeas = {
   delete: (id: string) =>
     api.delete<{ ok: true }>(`/organic/ideas/${id}`),
 };
+
+// ============================================================
+// Notifications — top-bar bell
+// ============================================================
+
+export type NotificationSeverity = 'info' | 'success' | 'warning' | 'error';
+
+export interface AppNotification {
+  id: string;
+  type: string;
+  severity: NotificationSeverity;
+  title: string;
+  body: string | null;
+  link: string | null;
+  metadata: Record<string, unknown>;
+  readAt: string | null;
+  createdAt: string;
+}
+
+export const notifications = {
+  list: () =>
+    api.get<{ notifications: AppNotification[]; unreadCount: number }>('/notifications'),
+  /** Mark specific ids read, or all when omitted. */
+  markRead: (ids?: string[]) =>
+    api.post<{ updated: number }>('/notifications/read', ids ? { ids } : {}),
+  clearAll: () => api.delete<{ deleted: number }>('/notifications'),
+};

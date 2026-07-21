@@ -5,9 +5,10 @@
  */
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, Bell, ChevronDown, LogOut } from 'lucide-react';
+import { Search, ChevronDown, LogOut } from 'lucide-react';
 import { auth, CurrentUser } from '@/lib/api';
 import { BrandSelector } from './BrandSelector';
+import { NotificationsBell } from './NotificationsBell';
 
 export function TopBar({ user }: { user: CurrentUser }) {
   const router = useRouter();
@@ -62,14 +63,7 @@ export function TopBar({ user }: { user: CurrentUser }) {
         {/* Active brand selector — only renders on /organic/* */}
         <BrandSelector />
 
-        <button
-          aria-label="Notifications"
-          className="relative p-2 rounded hover:bg-white/55 text-ink-muted hover:text-ink transition-colors"
-        >
-          <Bell size={18} strokeWidth={2} />
-          {/* Notification dot — placeholder */}
-          <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-accent rounded-full" />
-        </button>
+        <NotificationsBell />
 
         <div className="relative" ref={menuRef}>
           <button
