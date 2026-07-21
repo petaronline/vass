@@ -2000,6 +2000,11 @@ interface AdCreativePeek {
       page_id?: string;
       instagram_user_id?: string;
     };
+    // Many ads (existing-post ads, catalog/DPA, asset-feed creatives) carry no
+    // inline object_story_spec but DO expose the backing post id, which is
+    // "{pageId}_{postId}". We parse the page id out of it as a fallback so
+    // those accounts still resolve a Page + picture.
+    effective_object_story_id?: string;
   };
 }
 
@@ -2014,10 +2019,12 @@ export async function fetchAccountIdentity(
   metaAdAccountId: string
 ): Promise<AdAccountIdentity> {
   try {
-    // Sample up to 25 most recent ads. Use a single API call for both fields.
+    // Sample up to 25 most recent ads. Pull the inline spec AND the backing
+    // post id (effective_object_story_id) so we can resolve a Page even when
+    // the ad has no inline object_story_spec.
     const url = `${GRAPH_BASE}/${encodeURIComponent(
       metaAdAccountId
-    )}/ads?fields=creative%7Bobject_story_spec%7Bpage_id%2Cinstagram_user_id%7D%7D&limit=25`;
+    )}/ads?fields=creative%7Bobject_story_spec%7Bpage_id%2Cinstagram_user_id%7D%2Ceffective_object_story_id%7D&limit=25`;
     const data: { data?: AdCreativePeek[] } = await metaFetch(url, {
       access_token: accessToken,
     });
@@ -2031,8 +2038,14 @@ export async function fetchAccountIdentity(
     const igCounts = new Map<string, number>();
     for (const ad of ads) {
       const spec = ad.creative?.object_story_spec;
-      if (spec?.page_id) {
-        pageCounts.set(spec.page_id, (pageCounts.get(spec.page_id) ?? 0) + 1);
+      // Prefer the inline page_id; fall back to the "{pageId}_{postId}" form.
+      let pid = spec?.page_id ?? null;
+      if (!pid) {
+        const eosi = ad.creative?.effective_object_story_id;
+        if (eosi && eosi.includes('_')) pid = eosi.split('_')[0];
+      }
+      if (pid) {
+        pageCounts.set(pid, (pageCounts.get(pid) ?? 0) + 1);
       }
       if (spec?.instagram_user_id) {
         igCounts.set(spec.instagram_user_id, (igCounts.get(spec.instagram_user_id) ?? 0) + 1);
@@ -2068,6 +2081,24 @@ export async function fetchAccountIdentity(
         }
       } catch {
         // Page picture is decoration only — ignore failures silently
+      }
+    }
+
+    // Fallback: if the Page had no usable picture (silhouette, unreadable, or
+    // no page at all) but the account runs Instagram ads, use the IG account's
+    // profile picture instead. Covers IG-only / DPA accounts that otherwise
+    // show a blank avatar.
+    if (!pictureUrl && instagramUserId) {
+      try {
+        const igUrl = `${GRAPH_BASE}/${instagramUserId}?fields=profile_picture_url`;
+        const igData: { profile_picture_url?: string } = await metaFetch(igUrl, {
+          access_token: accessToken,
+        });
+        if (igData?.profile_picture_url) {
+          pictureUrl = igData.profile_picture_url;
+        }
+      } catch {
+        // IG picture is decoration only — ignore failures silently
       }
     }
 

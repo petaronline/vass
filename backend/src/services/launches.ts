@@ -306,6 +306,46 @@ export async function createLaunchBatch(opts: {
 // Read APIs — used by the launches list page & live progress page
 // =====================================================================
 
+/**
+ * Aggregate stats for the dashboard tiles:
+ *   - adsLaunchedThisMonth: sum of successfully-launched ads in batches created
+ *     since the start of the current month.
+ *   - avgLaunchSeconds: mean wall-clock duration (completed_at - started_at)
+ *     across batches that actually finished. null when there's nothing to average.
+ * Scoped per-user unless userId is omitted (admin = whole workspace).
+ */
+export async function getLaunchStats(opts?: {
+  userId?: string;
+}): Promise<{ adsLaunchedThisMonth: number; avgLaunchSeconds: number | null }> {
+  const params: any[] = [];
+  let scope = '';
+  if (opts?.userId) {
+    params.push(opts.userId);
+    scope = `AND user_id = $${params.length}`;
+  }
+  const { rows } = await query<{ ads_this_month: string; avg_seconds: string | null }>(
+    `SELECT
+        COALESCE(SUM(total_ads_launched) FILTER (
+          WHERE created_at >= date_trunc('month', NOW())
+        ), 0)::text AS ads_this_month,
+        (AVG(EXTRACT(EPOCH FROM (completed_at - started_at))) FILTER (
+          WHERE completed_at IS NOT NULL AND started_at IS NOT NULL
+                AND completed_at >= started_at
+        ))::text AS avg_seconds
+     FROM launch_batches
+     WHERE 1 = 1 ${scope}`,
+    params
+  );
+  const r = rows[0];
+  return {
+    adsLaunchedThisMonth: parseInt(r?.ads_this_month ?? '0', 10),
+    avgLaunchSeconds:
+      r?.avg_seconds != null && r.avg_seconds !== ''
+        ? Math.round(parseFloat(r.avg_seconds))
+        : null,
+  };
+}
+
 export async function listLaunchBatches(opts?: {
   userId?: string;
   limit?: number;

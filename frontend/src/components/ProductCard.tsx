@@ -35,6 +35,7 @@ import {
   BookCopy,
   History,
   Sparkles,
+  MessageSquareOff,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -45,6 +46,7 @@ export type ProductTheme =
   | 'audit'
   | 'templates'
   | 'launches'
+  | 'commentGuard'
   | 'ai';
 
 /**
@@ -59,16 +61,18 @@ export type ProductIconName =
   | 'shield'
   | 'book'
   | 'history'
+  | 'messageOff'
   | 'sparkles';
 
 const ICON_REGISTRY: Record<ProductIconName, LucideIcon> = {
-  rocket:   Rocket,
-  layers:   Layers,
-  table:    Table2,
-  shield:   Shield,
-  book:     BookCopy,
-  history:  History,
-  sparkles: Sparkles,
+  rocket:     Rocket,
+  layers:     Layers,
+  table:      Table2,
+  shield:     Shield,
+  book:       BookCopy,
+  history:    History,
+  messageOff: MessageSquareOff,
+  sparkles:   Sparkles,
 };
 
 type CornerPos = 'tl' | 'tr' | 'bl' | 'br';
@@ -101,6 +105,7 @@ const STYLES: Record<ProductTheme, ProductStyle> = {
   audit:      { rgb: '52, 211, 153',  iconFg: '#047857', corner: 'br' }, // mint
   templates:  { rgb: '167, 139, 250', iconFg: '#6D28D9', corner: 'br' }, // lilac
   launches:   { rgb: '125, 211, 252', iconFg: '#0369A1', corner: 'tr' }, // sky
+  commentGuard: { rgb: '45, 212, 191', iconFg: '#0F766E', corner: 'br' }, // teal
   ai:         { rgb: '252, 165, 165', iconFg: '#BE123C', corner: 'bl' }, // peach
 };
 

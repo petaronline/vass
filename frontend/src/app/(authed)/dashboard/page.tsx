@@ -24,7 +24,6 @@ import {
   BookCopy,
   History,
   ArrowRight,
-  Sparkles,
   LayoutDashboard,
   type LucideIcon,
 } from 'lucide-react';
@@ -71,6 +70,22 @@ interface RecentBatchesResp {
   batches: RecentBatch[];
 }
 
+interface LaunchStats {
+  adsLaunchedThisMonth: number;
+  avgLaunchSeconds: number | null;
+}
+
+/** Format an average launch duration (seconds) into a compact label. */
+function formatLaunchTime(seconds: number | null): string {
+  if (seconds == null || seconds <= 0) return '—';
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.round(seconds % 60);
+  if (mins < 60) return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  return `${hrs}h ${mins % 60}m`;
+}
+
 function getGreeting(): string {
   const hour = new Date().getHours();
   if (hour < 12) return 'Good morning';
@@ -82,11 +97,12 @@ export default async function DashboardPage() {
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get('vass_session')?.value ?? '';
 
-  const [me, metaStatus, adAccountsResp, recentBatchesResp] = await Promise.all([
+  const [me, metaStatus, adAccountsResp, recentBatchesResp, launchStats] = await Promise.all([
     apiGet<{ user: { name: string; role: string } }>('/auth/me', sessionCookie),
     apiGet<MetaStatus>('/settings/meta', sessionCookie),
     apiGet<AdAccountsResp>('/ad-accounts', sessionCookie),
     apiGet<RecentBatchesResp>('/launches', sessionCookie),
+    apiGet<LaunchStats>('/launches/stats', sessionCookie),
   ]);
 
   const greeting = getGreeting();
@@ -149,8 +165,18 @@ export default async function DashboardPage() {
 
       {/* Stat cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
-        <StatCard icon={Rocket} label="Ads launched" value="—" subtitle="This month" />
-        <StatCard icon={Clock} label="Avg. launch time" value="—" subtitle="Across batches" />
+        <StatCard
+          icon={Rocket}
+          label="Ads launched"
+          value={launchStats ? String(launchStats.adsLaunchedThisMonth) : '—'}
+          subtitle="This month"
+        />
+        <StatCard
+          icon={Clock}
+          label="Avg. launch time"
+          value={formatLaunchTime(launchStats?.avgLaunchSeconds ?? null)}
+          subtitle="Across batches"
+        />
         <StatCard
           icon={Layers}
           label="Ad accounts"
@@ -223,13 +249,13 @@ export default async function DashboardPage() {
             status="live"
           />
           <ProductCard
-            theme="ai"
-            iconName="sparkles"
-            title="AI assistant"
-            tagline="Draft copy variants, suggest CTAs, and shape your funnel."
-            href="#"
-            ctaLabel="Notify me"
-            status="coming-soon"
+            theme="commentGuard"
+            iconName="messageOff"
+            title="Comment Guard"
+            tagline="Auto-hide unwanted comments on your ads — links, phone numbers, profanity, keywords."
+            href="/comment-guard"
+            ctaLabel="Open Comment Guard"
+            status="live"
           />
         </div>
       </section>

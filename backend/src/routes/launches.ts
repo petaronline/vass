@@ -13,6 +13,7 @@ import { requireAuth } from '../middleware/auth';
 import {
   createLaunchBatch,
   listLaunchBatches,
+  getLaunchStats,
   findLaunchBatchById,
   listAdLaunches,
   retryAdLaunch,
@@ -111,6 +112,15 @@ launchesRouter.get('/', requireAuth, async (req: Request, res: Response) => {
     limit: 50,
   });
   res.json({ batches });
+});
+
+// =====================================================================
+// GET /launches/stats — dashboard tiles (declared before /:id)
+// =====================================================================
+launchesRouter.get('/stats', requireAuth, async (req: Request, res: Response) => {
+  const isAdmin = req.user!.role === 'admin';
+  const stats = await getLaunchStats({ userId: isAdmin ? undefined : req.user!.id });
+  res.json(stats);
 });
 
 // =====================================================================
