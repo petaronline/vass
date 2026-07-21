@@ -50,6 +50,7 @@ import {
   Instagram,
   AtSign,
   X as XIcon,
+  type LucideIcon,
 } from 'lucide-react';
 import {
   brands as brandsApi,
@@ -647,16 +648,7 @@ export function BrandSelector() {
                         onClick={() => toggleMember(m)}
                         className="flex items-center gap-2.5 w-full text-left pl-10 pr-3 py-1.5 text-xs hover:bg-surface-hover transition-colors"
                       >
-                        {m.pictureUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={m.pictureUrl}
-                            alt=""
-                            className="w-4 h-4 rounded-full shrink-0 object-cover"
-                          />
-                        ) : (
-                          <Icon size={11} className="text-ink-subtle shrink-0" />
-                        )}
+                        <MemberAvatar pictureUrl={m.pictureUrl} icon={Icon} name={m.name} />
                         <span className="flex-1 text-ink truncate">{m.name}</span>
                         <span className="text-2xs text-ink-subtle">{m.sub}</span>
                         {isMemberActive && <Check size={12} className="text-accent ml-1" />}
@@ -683,16 +675,7 @@ export function BrandSelector() {
                       onClick={() => toggleMember(m)}
                       className="flex items-center gap-2.5 w-full text-left px-3 py-1.5 text-xs hover:bg-surface-hover transition-colors"
                     >
-                      {m.pictureUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={m.pictureUrl}
-                          alt=""
-                          className="w-4 h-4 rounded-full shrink-0 object-cover"
-                        />
-                      ) : (
-                        <Icon size={11} className="text-ink-subtle shrink-0" />
-                      )}
+                      <MemberAvatar pictureUrl={m.pictureUrl} icon={Icon} name={m.name} />
                       <span className="flex-1 text-ink truncate">{m.name}</span>
                       <span className="text-2xs text-ink-subtle">{m.sub}</span>
                       {isMemberActive && <Check size={12} className="text-accent ml-1" />}
@@ -725,4 +708,33 @@ export function BrandSelector() {
       )}
     </div>
   );
+}
+
+/**
+ * Small avatar for a scope member (ad account or profile) in the picker.
+ * Renders the picture, but falls back to the member's type icon if the URL
+ * fails to load — e.g. an expired Meta signed URL — instead of a broken image.
+ */
+function MemberAvatar({
+  pictureUrl,
+  icon: Icon,
+  name,
+}: {
+  pictureUrl: string | null;
+  icon: LucideIcon;
+  name: string;
+}) {
+  const [failed, setFailed] = useState(false);
+  if (pictureUrl && !failed) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return (
+      <img
+        src={pictureUrl}
+        alt={name}
+        onError={() => setFailed(true)}
+        className="w-4 h-4 rounded-full shrink-0 object-cover"
+      />
+    );
+  }
+  return <Icon size={11} className="text-ink-subtle shrink-0" />;
 }
