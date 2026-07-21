@@ -129,6 +129,10 @@ export default function LaunchPage() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [creatives, setCreatives] = useState<CreativeItem[]>([]);
   const [accountsList, setAccountsList] = useState<AdAccount[]>([]);
+  /** Ad-account ids implied by the active brand/account scope, or null for
+   *  "all" (no filter). Drives the Sprout-style folder filtering of the
+   *  account dropdown. */
+  const [scopedIds, setScopedIds] = useState<string[] | null>(null);
   const [campaigns, setCampaigns] = useState<MetaCampaign[]>([]);
   const [adSetsList, setAdSetsList] = useState<MetaAdSet[]>([]);
   const [adSetFilter, setAdSetFilter] = useState('');
@@ -182,12 +186,19 @@ export default function LaunchPage() {
       const ids = getActiveAdAccountIds(
         accountsList.map((a) => ({ id: a.id, brandId: a.brandId }))
       );
-      if (ids && ids.length > 0) {
+      // Track the scope so the dropdown can filter to it (folder behavior).
+      // Ignore a scope that matches none of THIS user's enabled accounts —
+      // otherwise the dropdown would go empty.
+      const usable = ids && ids.some((id) => accountsList.find((a) => a.id === id))
+        ? ids.filter((id) => accountsList.find((a) => a.id === id))
+        : null;
+      setScopedIds(usable);
+      if (usable && usable.length > 0) {
         // Only auto-fill if the current selection isn't already one of
         // the scoped accounts (don't fight the user).
         setForm((f) => {
-          if (f.adAccountId && ids.includes(f.adAccountId)) return f;
-          return { ...f, adAccountId: ids[0] };
+          if (f.adAccountId && usable.includes(f.adAccountId)) return f;
+          return { ...f, adAccountId: usable[0] };
         });
       }
     };
@@ -574,6 +585,14 @@ export default function LaunchPage() {
   }
 
   // ---- Derived ----
+  // Accounts selectable in the dropdown. When a brand/account scope is active
+  // (scopedIds non-null), show only those; otherwise show all. Falls back to
+  // the full list if scoping would leave it empty.
+  const visibleAccounts =
+    scopedIds && scopedIds.length > 0
+      ? accountsList.filter((a) => scopedIds.includes(a.id))
+      : accountsList;
+
   const selectedAccount = accountsList.find((a) => a.id === form.adAccountId);
   const selectedAdSets = useMemo(
     () => adSetsList.filter((s) => form.selectedAdSetIds.includes(s.id)),
@@ -662,8 +681,12 @@ export default function LaunchPage() {
                     setField('selectedAdSetIds', []);
                   }}
                   placeholder="Select an account…"
+                  // Folder behavior: when a brand/account scope is active, only
+                  // its account(s) are selectable, and a single-account scope
+                  // locks the field.
+                  disabled={visibleAccounts.length === 1}
                 >
-                  {accountsList.map((a) => (
+                  {visibleAccounts.map((a) => (
                     <option key={a.id} value={a.id}>{a.name}</option>
                   ))}
                 </Select>

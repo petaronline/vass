@@ -77,6 +77,9 @@ export default function BulkLaunchPage() {
   // ----- Where -----
   const [accountsLoading, setAccountsLoading] = useState(true);
   const [allAccounts, setAllAccounts] = useState<AdAccount[]>([]);
+  /** Ad-account ids implied by the active brand/account scope, or null for
+   *  "all". Drives Sprout-style folder filtering of the account dropdown. */
+  const [scopedIds, setScopedIds] = useState<string[] | null>(null);
   const [accountId, setAccountId] = useState<string | null>(null);
 
   const [campaigns, setCampaigns] = useState<MetaCampaign[]>([]);
@@ -157,8 +160,12 @@ export default function BulkLaunchPage() {
       const ids = getActiveAdAccountIds(
         allAccounts.map((a) => ({ id: a.id, brandId: a.brandId }))
       );
-      if (ids && ids.length > 0) {
-        setAccountId((cur) => (cur && ids.includes(cur) ? cur : ids[0]));
+      const usable = ids && ids.some((id) => allAccounts.find((a) => a.id === id))
+        ? ids.filter((id) => allAccounts.find((a) => a.id === id))
+        : null;
+      setScopedIds(usable);
+      if (usable && usable.length > 0) {
+        setAccountId((cur) => (cur && usable.includes(cur) ? cur : usable[0]));
       }
     };
     apply();
@@ -400,6 +407,13 @@ export default function BulkLaunchPage() {
   }
 
   const enabledAccounts = allAccounts.filter((a) => a.isEnabled && a.status === 'active');
+  // Folder behavior: narrow to the active brand/account scope when set.
+  // Never let scoping empty the dropdown — fall back to all enabled accounts.
+  const scopedEnabled =
+    scopedIds && scopedIds.length > 0
+      ? enabledAccounts.filter((a) => scopedIds.includes(a.id))
+      : enabledAccounts;
+  const visibleAccounts = scopedEnabled.length > 0 ? scopedEnabled : enabledAccounts;
 
   return (
     <div className="w-full pb-12">
@@ -430,9 +444,10 @@ export default function BulkLaunchPage() {
                   value={accountId ?? ''}
                   onChange={(e) => setAccountId(e.target.value || null)}
                   className="input"
+                  disabled={visibleAccounts.length === 1}
                 >
                   <option value="">Choose an ad account…</option>
-                  {enabledAccounts.map((a) => (
+                  {visibleAccounts.map((a) => (
                     <option key={a.id} value={a.id}>{a.name} ({a.currency})</option>
                   ))}
                 </select>

@@ -135,6 +135,9 @@ export default function SheetsPage() {
   // ---- Top: account + campaign ----
   const [activeOnly, setActiveOnly] = useState(true);
   const [accounts, setAccounts] = useState<AdAccount[]>([]);
+  /** Ad-account ids implied by the active brand/account scope, or null for
+   *  "all". Drives Sprout-style folder filtering of the account dropdown. */
+  const [scopedIds, setScopedIds] = useState<string[] | null>(null);
   const [accountId, setAccountId] = useState('');
   const [campaigns, setCampaigns] = useState<MetaCampaign[]>([]);
   const [campaignId, setCampaignId] = useState('');
@@ -227,8 +230,12 @@ export default function SheetsPage() {
       const ids = getActiveAdAccountIds(
         accounts.map((a) => ({ id: a.id, brandId: a.brandId }))
       );
-      if (ids && ids.length > 0) {
-        setAccountId((cur) => (cur && ids.includes(cur) ? cur : ids[0]));
+      const usable = ids && ids.some((id) => accounts.find((a) => a.id === id))
+        ? ids.filter((id) => accounts.find((a) => a.id === id))
+        : null;
+      setScopedIds(usable);
+      if (usable && usable.length > 0) {
+        setAccountId((cur) => (cur && usable.includes(cur) ? cur : usable[0]));
       }
     };
     apply();
@@ -237,6 +244,14 @@ export default function SheetsPage() {
     return () => window.removeEventListener(VASS_ACTIVE_SCOPE_EVENT, onChange);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accounts]);
+
+  // Folder behavior: narrow the account dropdown to the active brand/account
+  // scope; never empty it (fall back to all enabled accounts).
+  const scopedEnabled =
+    scopedIds && scopedIds.length > 0
+      ? accounts.filter((a) => scopedIds.includes(a.id))
+      : accounts;
+  const visibleAccounts = scopedEnabled.length > 0 ? scopedEnabled : accounts;
 
   // ---- Load campaigns when account or activeOnly changes ----
   useEffect(() => {
@@ -802,9 +817,10 @@ export default function SheetsPage() {
               value={accountId}
               onChange={(e) => setAccountId(e.target.value)}
               className="input w-full text-sm bg-surface"
+              disabled={visibleAccounts.length === 1}
             >
               <option value="">Pick an account…</option>
-              {accounts.map((a) => (
+              {visibleAccounts.map((a) => (
                 <option key={a.id} value={a.id}>{a.name}</option>
               ))}
             </select>
