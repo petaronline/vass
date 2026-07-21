@@ -53,9 +53,14 @@ echo "==> [5/5] Done. Finish on the server AS ROOT with:"
 echo
 # The staging trees are root-owned (unzipped by prior root installs), so the
 # stale-file cleanup must run as root here — not from the Mac as petaronline.
+# NOTE: install-patch.sh's `--build` reuses Docker's cache, so a changed
+# frontend often does NOT recompile. We force a --no-cache frontend rebuild so
+# UI changes actually go live (per HANDOFF.md).
 echo "    rm -rf $STAGING/backend $STAGING/frontend && \\"
 echo "      /opt/vass/install-patch.sh $STAGING/$ZIP && \\"
-echo "      ( sleep 5; ss -tln | grep -q ':4040' || ( cd /opt/vass && docker compose restart backend ) )"
+echo "      cd /opt/vass && docker compose build --no-cache frontend && \\"
+echo "      docker compose up -d --force-recreate frontend && \\"
+echo "      ( sleep 5; ss -tln | grep -q ':4040' || docker compose restart backend )"
 echo
 echo "Then verify from anywhere:"
 echo "    curl -s -o /dev/null -w '%{http_code}\\n' https://vass.petaronline.us/api/health   # expect 200"

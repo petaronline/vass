@@ -42,7 +42,12 @@ curl -s -o /dev/null -w '%{http_code}\n' https://vass.petaronline.us/api/health 
 4. **Watch the port-4040 race.** With `network_mode: host`, a force-recreate can
    briefly collide on 4040 and kill the new API. The install command above
    restarts the backend if 4040 isn't listening after 5s.
-5. **Migrations are tracked by filename and must be self-consistent.** Never edit
+5. **Frontend changes need a `--no-cache` rebuild.** `install-patch.sh`'s
+   `docker compose up --build` reuses Docker's cache, so a changed frontend
+   often keeps serving the OLD compiled bundle. `deploy.sh`'s printed command
+   forces `docker compose build --no-cache frontend`. Verify with
+   `docker compose logs frontend | grep -i compiled`.
+6. **Migrations are tracked by filename and must be self-consistent.** Never edit
    an applied migration's effect; add a new numbered file. A new CHECK-constraint
    migration must list the *full union* of every status the code writes (this is
    what bit `027`).
