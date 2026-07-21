@@ -2076,8 +2076,13 @@ export async function fetchAccountIdentity(
           picture?: { data?: { url?: string; is_silhouette?: boolean } };
         } = await metaFetch(picUrl, { access_token: accessToken });
         const pic = picData?.picture?.data;
-        if (pic && !pic.is_silhouette && pic.url) {
-          pictureUrl = pic.url;
+        if (pic && !pic.is_silhouette) {
+          // Store the STABLE redirect endpoint — NOT pic.url. The
+          // ?fields=picture{url} form returns a signed lookaside/scontent CDN
+          // URL with a time-limited signature ("URL signature expired" once it
+          // lapses). /{id}/picture 302-redirects to the current image on every
+          // request, so it never goes stale.
+          pictureUrl = `https://graph.facebook.com/${pageId}/picture?type=large`;
         }
       } catch {
         // Page picture is decoration only — ignore failures silently

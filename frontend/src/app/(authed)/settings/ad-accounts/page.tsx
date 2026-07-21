@@ -20,6 +20,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { RefreshCw, CheckCircle2, AlertCircle, Search, Megaphone, Plus } from 'lucide-react';
 import { adAccounts, ApiError, AdAccount } from '@/lib/api';
 import { Toggle } from '@/components/Toggle';
+import { AdAccountAvatar } from '@/components/AdAccountAvatar';
 
 interface Toast { id: number; type: 'success' | 'error'; message: string; }
 let toastCounter = 0;
@@ -213,14 +214,10 @@ function AdAccountCard({
   const isActive = acct.status === 'active';
   return (
     <li className="flex items-center gap-3 bg-white/72 backdrop-blur-card border border-white/60 rounded-lg shadow-glass px-4 py-3">
-      {acct.pictureUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={acct.pictureUrl} alt="" className="w-9 h-9 rounded-full shrink-0 object-cover" />
-      ) : (
-        <div className="w-9 h-9 rounded-full shrink-0 bg-surface-alt flex items-center justify-center">
-          <Megaphone size={15} className="text-ink-subtle" />
-        </div>
-      )}
+      {/* AdAccountAvatar renders the picture and falls back to a colored
+          initial on load failure — so an expired/blocked Meta URL degrades to
+          initials instead of a broken-image icon. */}
+      <AdAccountAvatar name={acct.name} pictureUrl={acct.pictureUrl} size={36} />
 
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
